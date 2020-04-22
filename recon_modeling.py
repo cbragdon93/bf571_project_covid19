@@ -20,6 +20,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import math
 import itertools
+import os 
 
 #%%
 #note to self: recon3d model uses bigg ids for genes
@@ -30,6 +31,7 @@ def model_info(model):
     print(str(len(model.genes))+" Genes")
     print("Objective"+str(model.objective))
     modelinfo_dict = {}
+    
     # Iterate through the the objects in the model
     modelinfo_dict["Reactions"]={}
     modelinfo_dict["Reactions"]["string"]="Reactions/n ---------/n"
@@ -61,8 +63,11 @@ def model_info(model):
     return modelinfo_dict
 
 
-#%%
-rootdir = "/home/callen/Documents/spring_2020/bio_networks/HW/recon/"
+#%% load_what_model
+# loads cobra model of a file based on its filetype
+# inputs: model_file -- string or path variable to file of interest
+#         filetype -- string, either 'json' or 'mat'
+rootdir = ""
 def load_what_model(model_file, filetype=None):
     model_filetype = None
     # yanking out the file extension.
@@ -72,6 +77,9 @@ def load_what_model(model_file, filetype=None):
             "json" : lambda x: cobra.io.json.load_json_model(x),
             "mat" : lambda x: cobra.io.load_matlab_model(x)
         }
+    # QC on parameter specifications by user. 
+    # user can either throw in a ".[json/mat]" file or 
+    # use an extension-less file, but specify what file type it is
     if len(filestring_split) >= 2:
         # some people put '.'s in their dir names
         # so looking at last one generically just in case
@@ -81,7 +89,7 @@ def load_what_model(model_file, filetype=None):
         # concept of file extensions. We must please all,
         # including those that we cannot see since they are
         # in a different astral plane.
-        model_filetype=filetype
+        model_filetype=filetype.lower()
     else:
         # if the user doesn't wield the function correctly 
         # based on above
@@ -90,15 +98,29 @@ def load_what_model(model_file, filetype=None):
              parameter as a string, either 'json' or 'mat'.""")
     reading_function = function_switcher[model_filetype]
     return reading_function(model_file)
-#%%
+
+
+#%% set wd based on user's file system/working copy
+abspath = os.path.abspath(__file__)
+dname = os.path.dirname(abspath)
+os.chdir(dname)
+
+#%% load model
 
 # load recon model
 print("loading model....")
-this_model = load_what_model(rootdir+"Recon3D.json")
+this_model = load_what_model("Recon3D.json")
 # get model info object
 this_model_info = model_info(this_model)
 
-#%%
+#%% unperturbed solution
+
+this_solution = this_model.optimize()
+unperturbed_growth = this_solution.objective_value
+
+
+#%% get drug targets
+
 # getting all the gene names
 genie_dict = {x["gene_name"]:x["gene_id"] for x in this_model_info["Genes"]["list"]}
 # a list of the drug targets from the covid ppi paper
@@ -118,11 +140,40 @@ drug_targets = [
 drug_targets_model = list(set(drug_targets).intersection(set(genie_dict.keys())))
 drug_targets_model_ids = [genie_dict[i] for i in drug_targets_model]
 
-#%%
+
+#%% finding immune genes
+
+# fetching all the sars-cov2 gene-gene interactions from the given csv file
+interactions = pd.read_csv(
+        rootdir+"project_support/Network_Gene_Gene_Reaction.csv"
+    )
+# so this file is made kinda funny. for any sars-cov2 interaction, sars-cov2 
+# is the source, and the gene(s) it targets get listed in the 'TYPE' column
+# so we simply need to pull the gene-gene interactions from this file and 
+# then isolate the TYPE values. sometimes the target value is just a single 
+# letter, which I take to be part of that set of genes they've named.
+
+# getting all gene-gene interactions as pandas frame
+interactions_gene_gene = interactions.dropna(subset=["IS_GENE_GENE"])
+# get unique names for the direct targets of sars-cov2 [parents] and those
+# the parents affect[children] for querying online sources
+sars_cov2_targets_parents = list(set(interactions_gene_gene["TARGET"]))
+sars_cov2_targets_children = list(set(interactions_gene_gene["TYPE"]))
+
+# debug block. set to True if you want to see the targets
+if False:
+    print("PARENTS")
+    print(sars_cov2_targets_parents)
+    print("CHILDREN")
+    print(sars_cov2_targets_children)
+
+#%% single-gene KO
 # single gene KOs
 print("single gene kos")
 sars_geneko_single = single_gene_deletion(this_model, gene_list = (drug_targets_model_ids))
-# double gene KOs
+
+
+#%% double gene KOs
 print("double gene kos")
 sars_geneko_double = double_gene_deletion(this_model, gene_list = drug_targets_model_ids)
 

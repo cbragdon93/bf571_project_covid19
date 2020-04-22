@@ -1,0 +1,12 @@
+Network_Gene_Gene_Reaction_Metabolite.csv default node,0,SUID,false
+Network_Gene_Gene_Reaction_Metabolite.csv default node,1,selected,false
+Network_Gene_Gene_Reaction_Metabolite.csv default node,2,shared name,true
+Network_Gene_Gene_Reaction_Metabolite.csv default node,3,name,true
+Network_Gene_Gene_Reaction_Metabolite.csv default node,4,real_name,true
+Network_Gene_Gene_Reaction_Metabolite.csv default node,5,type,true
+Network_Gene_Gene_Reaction_Metabolite_Disconnected.csv default node,0,SUID,false
+Network_Gene_Gene_Reaction_Metabolite_Disconnected.csv default node,1,selected,false
+Network_Gene_Gene_Reaction_Metabolite_Disconnected.csv default node,2,shared name,true
+Network_Gene_Gene_Reaction_Metabolite_Disconnected.csv default node,3,name,true
+Network_Gene_Gene_Reaction_Metabolite_Disconnected.csv default node,4,real_name,true
+Network_Gene_Gene_Reaction_Metabolite_Disconnected.csv default node,5,type,true
