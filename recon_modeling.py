@@ -22,8 +22,9 @@ import math
 import itertools
 import os 
 
-#%%
-#note to self: recon3d model uses bigg ids for genes
+#%% model_info function
+# note to self: recon3d model uses bigg ids for genes
+# input: cobrapy model object
 def model_info(model):
 
     print(str(len(model.reactions))+" Reactions")
@@ -99,6 +100,28 @@ def load_what_model(model_file, filetype=None):
     reading_function = function_switcher[model_filetype]
     return reading_function(model_file)
 
+#%% reaction modulator
+
+def rxn_modulate(model, 
+                 rxn_2mod, 
+                 start, 
+                 end, 
+                 rxns_monitored,
+                 which_bound="upper", 
+                 num_steps=100, 
+                 rxn_list=None):
+    model_b = model
+    bound_list = np.linspace(start, end, num_steps)
+    my_sols_dict = {r : [] for r in rxns_monitored}
+    for f in range(num_steps):
+        if which_bound == "upper":
+            model_b.reactions.get_by_id(rxn_2mod).upper_bound = bound_list[f]
+        else:
+            model_b.reactions.get_by_id(rxn_2mod).lower_bound = bound_list[f]
+        this_sol = model_b.optimize()
+        for r in rxns_monitored:
+            my_sols_dict[r].append(this_sol.fluxes[r])
+    return(my_sols_dict)
 
 #%% set wd based on user's file system/working copy
 abspath = os.path.abspath(__file__)
@@ -123,6 +146,8 @@ unperturbed_growth = this_solution.objective_value
 
 # getting all the gene names
 genie_dict = {x["gene_name"]:x["gene_id"] for x in this_model_info["Genes"]["list"]}
+with open("genie_dict.json","w") as gd:
+    json.dump(genie_dict, gd)
 # a list of the drug targets from the covid ppi paper
 # [help me]
 drug_targets = [
@@ -141,7 +166,7 @@ drug_targets_model = list(set(drug_targets).intersection(set(genie_dict.keys()))
 drug_targets_model_ids = [genie_dict[i] for i in drug_targets_model]
 
 
-#%% finding immune genes
+#%% parent and children nodes
 
 # fetching all the sars-cov2 gene-gene interactions from the given csv file
 interactions = pd.read_csv(
@@ -167,13 +192,46 @@ if False:
     print("CHILDREN")
     print(sars_cov2_targets_children)
 
+#%% Finding the reactions the drug targets are associated with
+
+# some genes are associated with more than 1 rxn
+# and the reactions property will be comma separated if so
+# so just assume they all are associated with >1 rxn
+# then "unlist" after
+drug_target_rxn_dictlist = [x["reactions"].split(",") for x in this_model_info["Genes"]["list"] if x["gene_name"] in drug_targets]
+flat_drug_target_rxn = []
+for x in drug_target_rxn_dictlist:
+    for r in x:
+        flat_drug_target_rxn.append(r.strip())
+#get unique rxn ids
+flat_drug_target_rxn = list(set(flat_drug_target_rxn))
 #%% single-gene KO
 # single gene KOs
 print("single gene kos")
-sars_geneko_single = single_gene_deletion(this_model, gene_list = (drug_targets_model_ids))
+sars_geneko_single = single_gene_deletion(this_model, 
+                                          gene_list = (drug_targets_model_ids))
 
 
 #%% double gene KOs
-print("double gene kos")
-sars_geneko_double = double_gene_deletion(this_model, gene_list = drug_targets_model_ids)
+if False:
+    print("double gene kos")
+    sars_geneko_double = double_gene_deletion(this_model, 
+                                              gene_list = drug_targets_model_ids)
 
+#%% oxygen modulation
+o2_rids = [r.id for r in this_model.metabolites.o2_m.reactions]
+o2_names = [this_model.reactions.get_by_id(r).name for r in o2_rids]
+
+# This reaction is responsible for oxygen diffusion
+o2_diffusion_id = "O2tm"
+o2_diffusion = this_model.reactions.get_by_id(o2_diffusion_id)
+o2_diffusion_upper_default = o2_diffusion.upper_bound
+o2_diffusion_lower_default = o2_diffusion.lower_bound
+print("Modulating bound of " + o2_diffusion_id)
+o2_diffusion_mods = rxn_modulate(this_model, 
+                                 o2_diffusion_id,
+                                 o2_diffusion_upper_default, 
+                                 0,
+                                 flat_drug_target_rxn,
+                                 "upper", 
+                                 1000)
